@@ -1,5 +1,16 @@
 package solid;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.ArrayList;
+
 import cartago.Artifact;
 import cartago.OPERATION;
 import cartago.OpFeedbackParam;
@@ -29,7 +40,31 @@ public class Pod extends Artifact {
    */
     @OPERATION
     public void createContainer(String containerName) {
-        log("1. Implement the method createContainer()");
+        log("1. Running createContainer()");
+    try {
+        URL url = new URI(this.podURL + "/" + containerName + "/").toURL();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("HEAD");
+        int responseCode = connection.getResponseCode();
+
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            this.log("Container already exists: " + containerName);
+        } else {
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setRequestProperty("Content-Type", "text/turtle");
+            connection.setDoOutput(true);
+
+            int createResponseCode = connection.getResponseCode();
+            if (createResponseCode == HttpURLConnection.HTTP_CREATED) {
+                this.log("Container created successfully: " + containerName);
+            } else {
+                this.log("Failed to create container: " + containerName + ". Response code: " + createResponseCode);
+            }
+        }
+    } catch (Exception e) {
+        this.log("Error creating container: " + containerName + ". Exception: " + e.getMessage());
+    }
     }
 
   /**
@@ -41,7 +76,33 @@ public class Pod extends Artifact {
    */
     @OPERATION
     public void publishData(String containerName, String fileName, Object[] data) {
-        log("2. Implement the method publishData()");
+        log("2. Running publishData()");
+        
+        try {
+            URL url = new URI(this.podURL + "/" + containerName + "/" + fileName).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("PUT");
+            connection.setRequestProperty("Content-Type", "text/plain");
+            connection.setDoOutput(true);
+    
+            // Convert the data array to a string
+            String dataString = createStringFromArray(data);
+    
+            // Write the data to the output stream
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = dataString.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
+    
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_CREATED || responseCode == HttpURLConnection.HTTP_NO_CONTENT|| responseCode == HttpURLConnection.HTTP_RESET) {
+                this.log("Data published successfully to: " + containerName + "/" + fileName);
+            } else {
+                this.log("Failed to publish data to: " + containerName + "/" + fileName + ". Response code: " + responseCode);
+            }
+        } catch (Exception e) {
+            this.log("Error publishing data to: " + containerName + "/" + fileName + ". Exception: " + e.getMessage());
+        }
     }
 
   /**
@@ -64,23 +125,32 @@ public class Pod extends Artifact {
    * @return An array whose elements are the data read from the .txt file
    */
     public Object[] readData(String containerName, String fileName) {
-        log("3. Implement the method readData(). Currently, the method returns mock data");
-
-        // Remove the following mock responses once you have implemented the method
-        switch(fileName) {
-            case "watchlist.txt":
-                Object[] mockWatchlist = new Object[]{"The Matrix", "Inception", "Avengers: Endgame"};
-                return mockWatchlist;
-            case "sleep.txt":
-                Object[] mockSleepData = new Object[]{"6", "7", "5"};
-                return mockSleepData;
-            case "trail.txt":
-                Object[] mockTrailData = new Object[]{"3", "5.5", "5.5"};
-                return mockTrailData; 
-            default:
+        log("3. Running readData()");
+        try {
+            URL url = new URI(this.podURL + "/" + containerName + "/" + fileName).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("Accept", "text/plain");
+    
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                StringBuilder dataString = new StringBuilder();
+                try (BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        dataString.append(line).append("\n");
+                    }
+                }
+                return createArrayFromString(dataString.toString());
+            } else {
+                this.log("Failed to read data from: " + containerName + "/" + fileName + ". Response code: " + responseCode);
                 return new Object[0];
+            }
+        } catch (Exception e) {
+            this.log("Error reading data from: " + containerName + "/" + fileName + ". Exception: " + e.getMessage());
+            return new Object[0];
         }
-
+        
     }
 
   /**
